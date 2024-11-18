@@ -1,0 +1,14 @@
+{
+  "name": "@stracker/tech-test",
+  "version": "0.0.0",
+  "license": "MIT",
+  "scripts": {
+    "start": "ts-node index.ts"
+  },
+  "dependencies": {
+    "typescript": "~5.5"
+  },
+  "devDependencies": {
+    "ts-node": "^10.9.2"
+  }
+}
