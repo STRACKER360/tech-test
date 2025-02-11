@@ -1,4 +1,4 @@
-async function call3partyAPI() {
+async function gomoto() {
   return {
     status: 200, // could be 400 or 500 sometimes
     data: [
@@ -69,62 +69,93 @@ async function dbQuery() {
   ];
 }
 
+interface ClientTransport {
+  client: {
+    id: number;
+    name: string;
+  };
+  transports: {
+    id: number;
+    extRef: string;
+    status: number;
+  }[];
+}
+
+interface GomotoResponse {
+  status: number;
+  data: {
+    info: {
+      id: number;
+      events: {
+        transportRef: string;
+        name: string;
+      }[];
+    };
+  }[];
+}
+
+interface response {
+  ref: string;
+  eventName: string;
+  readableStatus: string;
+}
+
+enum TransportStatus {
+  PENDING = "pending",
+  IN_PROGRESS = "in_progress",
+  DELAYED = "delayed",
+  COMPLETED = "completed",
+  UNKNOWN = "unknown",
+}
+
+function getReadableStatus(status: number): string {
+  switch (status) {
+    case 1:
+      return TransportStatus.PENDING;
+    case 2:
+      return TransportStatus.IN_PROGRESS;
+    case 3:
+      return TransportStatus.DELAYED;
+    case 4:
+      return TransportStatus.COMPLETED;
+    default:
+      return TransportStatus.UNKNOWN;
+  }
+}
+
+function processEvents(
+  gomotoResponse: GomotoResponse,
+  dbResult: ClientTransport[]
+): response[] {
+  const response: response[] = [];
+
+  gomotoResponse.data.forEach((dataItem) => {
+    dataItem.info.events.forEach((event) => {
+      dbResult[0].transports.forEach((transport) => {
+        if (event.transportRef === transport.extRef) {
+          response.push({
+            ref: transport.extRef,
+            eventName: event.name,
+            readableStatus: getReadableStatus(transport.status),
+          });
+        }
+      });
+    });
+  });
+
+  return response;
+}
+
 async function execute() {
-  const client_response = await call3partyAPI();
+  const gomotoResponse: GomotoResponse = await gomoto();
   const dbResult = await dbQuery();
 
-  const Response: any[] = [];
-  if (client_response) {
-    for (let j = 0; j < client_response.data.length; j++) {
-      for (let i = 0; i < client_response.data[j].info.events.length; i++) {
-        for (let y = 0; y < dbResult[0].transports.length; y++) {
-          if (
-            client_response.data[j].info.events[i].transportRef ===
-              dbResult[0].transports[y].extRef &&
-            dbResult[0].transports[y].status === 1
-          ) {
-            Response.push({
-              ref: dbResult[0].transports[y].extRef,
-              eventName: client_response.data[j].info.events[i].name,
-              readableStatus: "pending",
-            });
-          } else if (
-            client_response.data[j].info.events[i].transportRef ===
-              dbResult[0].transports[y].extRef &&
-            dbResult[0].transports[y].status === 2
-          ) {
-            Response.push({
-              ref: dbResult[0].transports[y].extRef,
-              eventName: client_response.data[j].info.events[i].name,
-              readableStatus: "in_progress",
-            });
-          } else if (
-            client_response.data[j].info.events[i].transportRef ===
-              dbResult[0].transports[y].extRef &&
-            dbResult[0].transports[y].status === 3
-          ) {
-            Response.push({
-              ref: dbResult[0].transports[y].extRef,
-              eventName: client_response.data[j].info.events[i].name,
-              readableStatus: "delayed",
-            });
-          } else if (
-            client_response.data[j].info.events[i].transportRef ===
-              dbResult[0].transports[y].extRef &&
-            dbResult[0].transports[y].status === 4
-          ) {
-            Response.push({
-              ref: dbResult[0].transports[y].extRef,
-              eventName: client_response.data[j].info.events[i].name,
-              readableStatus: "completed",
-            });
-          }
-        }
-      }
-    }
+  if (!gomotoResponse || gomotoResponse.status !== 200) {
+    return [];
   }
 
-  return Response;
+  const response = processEvents(gomotoResponse, dbResult);
+  return response;
 }
 
 execute().then(console.log);
