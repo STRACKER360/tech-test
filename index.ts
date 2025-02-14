@@ -69,62 +69,51 @@ async function dbQuery() {
   ];
 }
 
-async function execute() {
-  const client_response = await call3partyAPI();
-  const dbResult = await dbQuery();
-
-  const Response: any[] = [];
-  if (client_response) {
-    for (let j = 0; j < client_response.data.length; j++) {
-      for (let i = 0; i < client_response.data[j].info.events.length; i++) {
-        for (let y = 0; y < dbResult[0].transports.length; y++) {
-          if (
-            client_response.data[j].info.events[i].transportRef ===
-              dbResult[0].transports[y].extRef &&
-            dbResult[0].transports[y].status === 1
-          ) {
-            Response.push({
-              ref: dbResult[0].transports[y].extRef,
-              eventName: client_response.data[j].info.events[i].name,
-              readableStatus: "pending",
-            });
-          } else if (
-            client_response.data[j].info.events[i].transportRef ===
-              dbResult[0].transports[y].extRef &&
-            dbResult[0].transports[y].status === 2
-          ) {
-            Response.push({
-              ref: dbResult[0].transports[y].extRef,
-              eventName: client_response.data[j].info.events[i].name,
-              readableStatus: "in_progress",
-            });
-          } else if (
-            client_response.data[j].info.events[i].transportRef ===
-              dbResult[0].transports[y].extRef &&
-            dbResult[0].transports[y].status === 3
-          ) {
-            Response.push({
-              ref: dbResult[0].transports[y].extRef,
-              eventName: client_response.data[j].info.events[i].name,
-              readableStatus: "delayed",
-            });
-          } else if (
-            client_response.data[j].info.events[i].transportRef ===
-              dbResult[0].transports[y].extRef &&
-            dbResult[0].transports[y].status === 4
-          ) {
-            Response.push({
-              ref: dbResult[0].transports[y].extRef,
-              eventName: client_response.data[j].info.events[i].name,
-              readableStatus: "completed",
-            });
-          }
-        }
-      }
-    }
+const getReadableStatusByTransportStatus = (transportStatus:number) => {
+  switch (transportStatus) {
+    case 1:
+    return  "pending"
+      
+    case 2:
+      return  "in_progress"
+        
+    case 3:
+      return  "delayed"
+        
+    case 4:
+      return  "completed"
+        
+    default:
+      return ""
   }
-
-  return Response;
 }
 
-execute().then(console.log);
+async function getTransportsStatus() {
+  const clientResponse = await call3partyAPI();
+  const dbResult = await dbQuery();
+  const response: any[] = [];
+
+  const flattenEvents =  clientResponse.data
+  .flatMap(entry => entry.info?.events || [])
+
+  if (clientResponse) {
+      for (const transport of dbResult[0].transports) {
+        const id = transport.extRef;
+        
+        
+          let name = flattenEvents.find(event => event.transportRef === id)?.name
+
+          if (name) {
+            response.push({
+              ref: id,
+              eventName: name,
+              readableStatus : getReadableStatusByTransportStatus(transport.status),
+            });
+          }
+      }
+  }
+
+  return response;
+}
+
+getTransportsStatus().then(console.log);
