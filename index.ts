@@ -69,62 +69,69 @@ async function dbQuery() {
   ];
 }
 
-async function execute() {
-  const client_response = await call3partyAPI();
-  const dbResult = await dbQuery();
-
-  const Response: any[] = [];
-  if (client_response) {
-    for (let j = 0; j < client_response.data.length; j++) {
-      for (let i = 0; i < client_response.data[j].info.events.length; i++) {
-        for (let y = 0; y < dbResult[0].transports.length; y++) {
-          if (
-            client_response.data[j].info.events[i].transportRef ===
-              dbResult[0].transports[y].extRef &&
-            dbResult[0].transports[y].status === 1
-          ) {
-            Response.push({
-              ref: dbResult[0].transports[y].extRef,
-              eventName: client_response.data[j].info.events[i].name,
-              readableStatus: "pending",
-            });
-          } else if (
-            client_response.data[j].info.events[i].transportRef ===
-              dbResult[0].transports[y].extRef &&
-            dbResult[0].transports[y].status === 2
-          ) {
-            Response.push({
-              ref: dbResult[0].transports[y].extRef,
-              eventName: client_response.data[j].info.events[i].name,
-              readableStatus: "in_progress",
-            });
-          } else if (
-            client_response.data[j].info.events[i].transportRef ===
-              dbResult[0].transports[y].extRef &&
-            dbResult[0].transports[y].status === 3
-          ) {
-            Response.push({
-              ref: dbResult[0].transports[y].extRef,
-              eventName: client_response.data[j].info.events[i].name,
-              readableStatus: "delayed",
-            });
-          } else if (
-            client_response.data[j].info.events[i].transportRef ===
-              dbResult[0].transports[y].extRef &&
-            dbResult[0].transports[y].status === 4
-          ) {
-            Response.push({
-              ref: dbResult[0].transports[y].extRef,
-              eventName: client_response.data[j].info.events[i].name,
-              readableStatus: "completed",
-            });
-          }
-        }
-      }
-    }
-  }
-
-  return Response;
+enum ReadableStatus {
+  PENDING = "pending",
+  IN_PROGRESS = "in_progress",
+  DELAYED = "delayed",
+  COMPLETED = "completed",
 }
 
-execute().then(console.log);
+type Client_Event = { transportRef: string; name: string };
+
+type Response = {
+  ref: string;
+  eventName: string;
+  readableStatus: ReadableStatus;
+};
+
+// Je n'y ai pas pensé hier mais il vaut mieux que le status par défaut soit "pending"
+function getReadableStatus(status: number): ReadableStatus {
+  if (status === 2) return ReadableStatus.IN_PROGRESS;
+  else if (status === 3) return ReadableStatus.DELAYED;
+  else if (status === 4) return ReadableStatus.COMPLETED;
+  else return ReadableStatus.PENDING;
+}
+
+async function execute(): Promise<Response[]> {
+  const client_response = await call3partyAPI();
+
+  // Je ne me suis pas attardé sur la gestion d'erreur, je pars du principe que la promesse n'échouera pas.
+  if (
+    client_response.status < 200 ||
+    client_response.status >= 400
+  ) {
+    throw new Error("Unable to fetch data from 3partyAPI");
+  }
+
+  const dbResult = await dbQuery();
+
+  const transports = dbResult[0].transports;
+
+  // Mon parti pris pour simplifier les itérations est de créer un tableau à 1 dimension.
+  const client_events: Client_Event[] = client_response.data.flatMap((item) =>
+    item.info.events
+  );
+
+  const responses: Response[] = client_events.reduce(
+    (acc: Response[], event: Client_Event) => {
+      const transport = transports.find((transport) =>
+        transport.extRef === event.transportRef
+      );
+      if (!transport) {
+        return acc;
+      }
+      const response = {
+        ref: event.transportRef,
+        eventName: event.name,
+        readableStatus: getReadableStatus(transport.status),
+      };
+      return [...acc, response];
+    },
+    [],
+  );
+
+  return responses;
+}
+
+// console.table pour l'affichage que j'aime bien
+execute().then(console.table).catch(console.error);
